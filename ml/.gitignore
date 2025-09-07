@@ -1,0 +1,102 @@
+### Python ###
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+pytestdebug.log
+coverage/
+
+# Type checkers / linters
+.mypy_cache/
+.pytype/
+.pyre/
+.ruff_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Environments (uv-managed or otherwise)
+.env
+.env.*
+.venv
+.venv/
+env/
+env.bak/
+venv/
+venv.bak/
+.python-version
+
+### FastAPI / Uvicorn ###
+uvicorn.log
+uvicorn*.log
+
+### Logs ###
+logs/
+*.log
+*.pid
+
+### IDEs & Editors ###
+.vscode/
+.idea/
+*.iml
+.history/
+*.swp
+*.swo
+
+### OS files ###
+.DS_Store
+Thumbs.db
+
+### Databases / local data ###
+*.sqlite3
+db.sqlite3
+
+### Node (if present) ###
+node_modules/
+
+# uv: keep lockfile tracked
+# (Do NOT ignore uv.lock)
+
+tmp
