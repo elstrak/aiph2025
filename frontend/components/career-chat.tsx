@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -18,51 +18,147 @@ interface Message {
   timestamp: Date
 }
 
-interface TrajectoryOption {
-  id: string
-  name: string
-  description: string
-  lastUpdated: Date
-}
 
 export function CareerChat() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      role: "assistant",
-      content:
-        "Привет! Я ваш AI-компаньон по карьерному развитию. Давайте построим или обновим вашу карьерную траекторию. Что вы хотели бы сделать?",
-      timestamp: new Date(),
-    },
-  ])
-
+  const [messages, setMessages] = useState<Message[]>([])
   const [inputMessage, setInputMessage] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [selectedTrajectory, setSelectedTrajectory] = useState<string>("")
-  const [trajectoryMode, setTrajectoryMode] = useState<"new" | "edit" | "">("")
+  const [sessionId, setSessionId] = useState<string>("")
+  const [interviewCompleted, setInterviewCompleted] = useState(false)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
-  const [saveToProfile, setSaveToProfile] = useState(true)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Mock existing trajectories
-  const existingTrajectories: TrajectoryOption[] = [
-    {
-      id: "1",
-      name: "Frontend Developer → Senior Frontend",
-      description: "Развитие в области фронтенд-разработки",
-      lastUpdated: new Date("2024-01-15"),
-    },
-    {
-      id: "2",
-      name: "Переход в Product Management",
-      description: "Смена направления на продуктовое управление",
-      lastUpdated: new Date("2024-01-10"),
-    },
-  ]
+  // Load saved session on component mount
+  useEffect(() => {
+    const savedSessionId = localStorage.getItem('career_session_id')
+    if (savedSessionId) {
+      console.log('Loading saved session:', savedSessionId)
+      loadSession(savedSessionId)
+    }
+  }, [])
+
+  // Create new session
+  const createSession = async () => {
+    try {
+      const response = await fetch('/api/sessions', {
+        method: 'POST',
+      })
+      const data = await response.json()
+      if (data.session_id) {
+        setSessionId(data.session_id)
+        localStorage.setItem('career_session_id', data.session_id)
+        
+        // Add welcome message
+        const welcomeMessage: Message = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: "Привет! Я ваш AI-консультант по карьерному развитию. Давайте проведем интервью, чтобы я мог лучше понять ваши цели и опыт. Расскажите о своей текущей профессиональной деятельности.",
+          timestamp: new Date(),
+        }
+        setMessages([welcomeMessage])
+        setInterviewCompleted(false)
+      }
+    } catch (error) {
+      console.error('Error creating session:', error)
+    }
+  }
+
+  // Load existing session from MongoDB
+  const loadSession = async (sessionId: string) => {
+    try {
+      const response = await fetch(`/api/sessions?sessionId=${sessionId}`)
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          // Session not found, clear localStorage
+          localStorage.removeItem('career_session_id')
+          return
+        }
+        throw new Error(`Failed to load session: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      if (data.session && data.messages) {
+        setSessionId(sessionId)
+        
+        // Convert messages from API format to component format
+        const convertedMessages: Message[] = data.messages.map((msg: any) => ({
+          id: msg.message_id,
+          role: msg.role,
+          content: msg.content,
+          timestamp: new Date(msg.created_at),
+        }))
+        
+        setMessages(convertedMessages)
+        
+        // Check if interview is completed (last assistant message has done: true)
+        const lastAssistantMessage = data.messages
+          .filter((msg: any) => msg.role === 'assistant')
+          .pop()
+        
+        if (lastAssistantMessage?.done) {
+          setInterviewCompleted(true)
+        }
+        
+        console.log(`Session restored: ${convertedMessages.length} messages`)
+      }
+    } catch (error) {
+      console.error('Error loading session:', error)
+      // Clear invalid session from localStorage
+      localStorage.removeItem('career_session_id')
+    }
+  }
+
+  // Send message to chat API
+  const sendMessageToAPI = async (text: string) => {
+    if (!sessionId) return
+
+    try {
+      const response = await fetch('/api/chat/session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sessionId, text }),
+      })
+      
+      const data = await response.json()
+      
+      if (data.reply) {
+        const aiResponse: Message = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: data.reply,
+          timestamp: new Date(),
+        }
+        setMessages(prev => [...prev, aiResponse])
+        
+        // Check if interview is completed
+        if (data.done) {
+          setInterviewCompleted(true)
+        }
+      }
+    } catch (error) {
+      console.error('Error sending message:', error)
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        role: "assistant", 
+        content: "Извините, произошла ошибка. Попробуйте еще раз.",
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, errorMessage])
+    }
+  }
+
 
   const handleSendMessage = async () => {
     if (!inputMessage.trim() && !uploadedFile) return
+    if (!sessionId) {
+      console.error('No session ID')
+      return
+    }
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -74,55 +170,13 @@ export function CareerChat() {
     setMessages((prev) => [...prev, userMessage])
     setInputMessage("")
     setIsLoading(true)
+    setUploadedFile(null)
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: generateAIResponse(userMessage.content, trajectoryMode, uploadedFile),
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, aiResponse])
-      setIsLoading(false)
-      setUploadedFile(null)
-    }, 1500)
+    // Send to real API
+    await sendMessageToAPI(userMessage.content)
+    setIsLoading(false)
   }
 
-  const generateAIResponse = (userInput: string, mode: string, file: File | null): string => {
-    if (file) {
-      return `Отлично! Я проанализировал ваше резюме "${file.name}". Вижу, что у вас есть опыт в области разработки. Теперь расскажите мне больше о ваших карьерных целях: какую позицию вы хотели бы занимать через 2-3 года? Какие навыки хотели бы развить?`
-    }
-
-    if (mode === "new") {
-      return `Создаем новую карьерную траекторию! Для начала мне нужно узнать о вас больше:
-      
-1. Какая у вас текущая профессиональная область?
-2. Сколько лет опыта работы?
-3. Какие ключевые навыки у вас есть?
-4. Куда вы хотите развиваться?
-
-Расскажите мне об этом, и я помогу построить персональный план развития.`
-    }
-
-    if (mode === "edit") {
-      return `Отлично! Мы будем редактировать существующую траекторию "${existingTrajectories.find((t) => t.id === selectedTrajectory)?.name}". Что именно вы хотели бы изменить или дополнить в вашем плане развития?`
-    }
-
-    // General responses based on keywords
-    if (userInput.toLowerCase().includes("навык")) {
-      return `Понимаю, вы хотите развивать навыки. Какие конкретно компетенции вас интересуют? Например:
-      
-• Hard skills (технические навыки)
-• Soft skills (коммуникация, лидерство)
-• Инструменты и технологии
-• Отраслевые знания
-
-Расскажите подробнее, и я предложу конкретные курсы и практические шаги.`
-    }
-
-    return `Спасибо за информацию! Это поможет мне лучше понять ваши потребности. Можете рассказать больше деталей? Чем конкретнее будет информация, тем более персонализированные рекомендации я смогу дать.`
-  }
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -131,30 +185,74 @@ export function CareerChat() {
     }
   }
 
-  const startNewTrajectory = () => {
-    setTrajectoryMode("new")
-    const message: Message = {
-      id: Date.now().toString(),
-      role: "assistant",
-      content:
-        "Отлично! Давайте создадим новую карьерную траекторию. Сначала расскажите о своем текущем опыте и целях.",
-      timestamp: new Date(),
-    }
-    setMessages((prev) => [...prev, message])
+  const startNewTrajectory = async () => {
+    // Clear previous session
+    localStorage.removeItem('career_session_id')
+    localStorage.removeItem('career_trajectory_data')
+    setMessages([])
+    setSessionId("")
+    setInterviewCompleted(false)
+    
+    // Create new session
+    await createSession()
   }
 
-  const startEditTrajectory = () => {
-    if (!selectedTrajectory) return
-    setTrajectoryMode("edit")
-    const trajectory = existingTrajectories.find((t) => t.id === selectedTrajectory)
-    const message: Message = {
-      id: Date.now().toString(),
-      role: "assistant",
-      content: `Будем редактировать траекторию "${trajectory?.name}". Что вы хотели бы изменить или дополнить?`,
-      timestamp: new Date(),
+  // Build trajectory from completed interview
+  const buildTrajectory = async () => {
+    if (!sessionId) {
+      console.error('No session ID for trajectory building')
+      return
     }
-    setMessages((prev) => [...prev, message])
+
+    setIsLoading(true)
+    
+    try {
+      const response = await fetch('/api/trajectory/build', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          weekly_hours: 10,      // Default values
+          total_months: 12,      // Can be made configurable later
+          target_positions_limit: 5,
+          current_positions_limit: 5,
+        }),
+      })
+
+      const data = await response.json()
+      
+      if (data.error) {
+        throw new Error(data.error)
+      }
+
+      // Success! Show success message and maybe navigate to trajectory tab
+      const successMessage: Message = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: `Отлично! Траектория построена успешно. Найдено ${data.current_positions?.length || 0} текущих вакансий и ${data.future_positions?.length || 0} целевых позиций. Перейдите во вкладку "Карьерная траектория" чтобы посмотреть детали.`,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, successMessage])
+
+      // Store trajectory data in localStorage for other components
+      localStorage.setItem('career_trajectory_data', JSON.stringify(data))
+      
+    } catch (error) {
+      console.error('Error building trajectory:', error)
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: `Извините, произошла ошибка при построении траектории: ${error instanceof Error ? error.message : String(error)}. Попробуйте еще раз.`,
+        timestamp: new Date(),
+      }
+      setMessages(prev => [...prev, errorMessage])
+    } finally {
+      setIsLoading(false)
+    }
   }
+
 
   return (
     <div className="grid gap-6 lg:grid-cols-3">
@@ -260,70 +358,80 @@ export function CareerChat() {
 
       {/* Control Panel */}
       <div className="space-y-6">
-        {/* Trajectory Mode Selection */}
+        {/* Session Management */}
         <Card>
           <CardHeader>
-            <CardTitle>Режим работы</CardTitle>
-            <CardDescription>Выберите, что вы хотите сделать</CardDescription>
+            <CardTitle>Интервью с AI</CardTitle>
+            <CardDescription>
+              {!sessionId ? "Начните новое интервью" : 
+               interviewCompleted ? "Интервью завершено!" : "Интервью в процессе"}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button
-              variant={trajectoryMode === "new" ? "default" : "outline"}
-              className="w-full justify-start"
-              onClick={startNewTrajectory}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Создать новую траекторию
-            </Button>
-
-            <div className="space-y-2">
-              <Label>Редактировать существующую</Label>
-              <Select value={selectedTrajectory} onValueChange={setSelectedTrajectory}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Выберите траекторию" />
-                </SelectTrigger>
-                <SelectContent>
-                  {existingTrajectories.map((trajectory) => (
-                    <SelectItem key={trajectory.id} value={trajectory.id}>
-                      {trajectory.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            {!sessionId ? (
               <Button
-                variant={trajectoryMode === "edit" ? "default" : "outline"}
                 className="w-full justify-start"
-                onClick={startEditTrajectory}
-                disabled={!selectedTrajectory}
+                onClick={startNewTrajectory}
               >
-                <Edit className="h-4 w-4 mr-2" />
-                Редактировать выбранную
+                <Plus className="h-4 w-4 mr-2" />
+                Начать интервью
               </Button>
-            </div>
+            ) : interviewCompleted ? (
+              <div className="space-y-2">
+                <Button
+                  className="w-full justify-start"
+                  onClick={buildTrajectory}
+                  disabled={isLoading}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  {isLoading ? 'Строим траекторию...' : 'Построить траекторию'}
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                  onClick={startNewTrajectory}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Начать новое интервью
+                </Button>
+              </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="text-sm text-muted-foreground">
+                              Продолжайте отвечать на вопросы AI для завершения интервью
+                            </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="w-full justify-start"
+                              onClick={() => {
+                                localStorage.clear()
+                                window.location.reload()
+                              }}
+                            >
+                              🗑️ Сбросить сессию (для отладки)
+                            </Button>
+                          </div>
+                        )}
           </CardContent>
         </Card>
 
-        {/* Settings */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Настройки</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="save-profile">Сохранять в профиль</Label>
-              <input
-                id="save-profile"
-                type="checkbox"
-                checked={saveToProfile}
-                onChange={(e) => setSaveToProfile(e.target.checked)}
-                className="rounded"
-              />
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Автоматически обновлять профиль на основе информации из чата
-            </p>
-          </CardContent>
-        </Card>
+        {/* Session Info */}
+        {sessionId && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Информация о сессии</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <div className="text-sm">
+                <strong>ID сессии:</strong> {sessionId.slice(0, 8)}...
+              </div>
+              <div className="text-sm">
+                <strong>Статус:</strong> {interviewCompleted ? 'Завершено' : 'В процессе'}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Quick Actions */}
         <Card>

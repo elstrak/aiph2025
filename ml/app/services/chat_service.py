@@ -16,7 +16,7 @@ class ChatService:
 
     def build_messages_payload(self, chat_messages: List[dict]) -> List[dict]:
         messages: List[dict] = [{"role": "system", "text": self._system_prompt}]
-        messages.extend({"role": m["role"], "text": m["content"]} for m in chat_messages)
+        messages.extend([{"role": m["role"], "text": m["content"]} for m in chat_messages])
         return messages
 
     def get_response_schema(self) -> dict:
@@ -47,7 +47,9 @@ class ChatService:
         sessions_repo: SessionsRepository,
         messages_repo: MessagesRepository,
     ) -> ChatResponse:
+        print(f"DEBUG: generate_reply called with session_id={session_id}, text='{text}'")
         session = await sessions_repo.find_by_id(session_id)
+        print(f"DEBUG: session found: {session is not None}")
         if not session:
             raise ValueError("Session not found")
 
@@ -66,6 +68,11 @@ class ChatService:
         # build last K
         last_msgs = await messages_repo.list_by_session(session_id, limit=40)
         messages = self.build_messages_payload(last_msgs)
+        
+        # Debug logging
+        print(f"DEBUG: last_msgs count: {len(last_msgs)}")
+        print(f"DEBUG: messages to YandexGPT: {messages}")
+        
         raw = run_structured_completion(messages, self.get_response_schema())
         reply_text, done = self.parse_model_output(raw)
 

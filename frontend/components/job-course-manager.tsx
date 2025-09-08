@@ -23,6 +23,34 @@ import {
   Target,
 } from "lucide-react"
 
+// Real trajectory data interfaces
+interface Position {
+  idx: number
+  title: string
+  company: string
+  location: string | null
+  salary: string
+  experience: string
+  description: string
+}
+
+interface LearningGroup {
+  group_id: number
+  title: string
+  estimated_months: number
+  hours_per_week: number
+  items: any[]
+  notes: string
+}
+
+interface TrajectoryData {
+  session_id: string
+  current_positions: Position[]
+  future_positions: Position[]
+  groups: LearningGroup[]
+}
+
+// Legacy interface for backward compatibility
 interface Job {
   id: string
   title: string
@@ -69,6 +97,7 @@ export function JobCourseManager() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedTrajectory, setSelectedTrajectory] = useState<string>("all")
+  const [trajectoryData, setTrajectoryData] = useState<TrajectoryData | null>(null)
   const [filters, setFilters] = useState({
     location: "all",
     experience: "all",
@@ -78,9 +107,66 @@ export function JobCourseManager() {
     level: "all",
   })
 
-  // Mock data
+  // Load trajectory data from localStorage
   useEffect(() => {
-    setJobs([
+    const loadTrajectoryData = () => {
+      try {
+        const savedData = localStorage.getItem('career_trajectory_data')
+        if (savedData) {
+          const data: TrajectoryData = JSON.parse(savedData)
+          setTrajectoryData(data)
+          
+          // Convert positions to jobs format
+          const allPositions = [...data.current_positions, ...data.future_positions]
+          const convertedJobs: Job[] = allPositions.map((pos, index) => ({
+            id: pos.idx.toString(),
+            title: pos.title,
+            company: pos.company,
+            location: pos.location || "Удаленно",
+            salary: pos.salary,
+            experience: pos.experience,
+            description: pos.description,
+            skills: [], // Could be extracted from description
+            professionalArea: "Анализ данных",
+            specialization: "Data Science",
+            role: pos.title.includes("Senior") ? "Senior" : "Middle",
+            functions: [],
+            hardSkills: [],
+            softSkills: [],
+            tools: [],
+            techStack: [],
+            matchScore: data.current_positions.includes(pos) ? 85 : 70, // Higher score for current positions
+            postedDate: new Date(),
+            url: "#"
+          }))
+          
+          setJobs(convertedJobs)
+          
+          // Convert learning groups to courses (simplified for now)
+          const convertedCourses: Course[] = data.groups.flatMap((group, groupIndex) => 
+            Array.from({ length: Math.min(group.items?.length || 3, 3) }, (_, itemIndex) => ({
+              id: `${group.group_id}-${itemIndex}`,
+              title: `${group.title} - Курс ${itemIndex + 1}`,
+              provider: "Рекомендованный провайдер",
+              description: group.notes,
+              duration: `${group.estimated_months} месяцев`,
+              price: "Бесплатно",
+              rating: 4.5,
+              level: "Средний",
+              skills: [],
+              category: "Анализ данных",
+              format: "Online",
+              language: "Русский",
+              matchScore: 80,
+              url: "#"
+            }))
+          )
+          
+          setCourses(convertedCourses)
+          console.log('Jobs and courses loaded from trajectory data')
+        } else {
+          // Fallback to mock data
+          setJobs([
       {
         id: "1",
         title: "Senior Frontend Developer",
@@ -196,6 +282,14 @@ export function JobCourseManager() {
         url: "#",
       },
     ])
+        }
+      } catch (error) {
+        console.error('Error loading trajectory data:', error)
+        // Keep empty arrays or load mock data as fallback
+      }
+    }
+    
+    loadTrajectoryData()
   }, [])
 
   const handleRefreshData = async () => {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -23,6 +23,34 @@ import {
   CheckSquare,
 } from "lucide-react"
 
+// Real API data interfaces
+interface Position {
+  idx: number
+  title: string
+  company: string
+  location: string | null
+  salary: string
+  experience: string
+  description: string
+}
+
+interface LearningGroup {
+  group_id: number
+  title: string
+  estimated_months: number
+  hours_per_week: number
+  items: any[] // Course items
+  notes: string
+}
+
+interface TrajectoryData {
+  session_id: string
+  current_positions: Position[]
+  future_positions: Position[]
+  groups: LearningGroup[]
+}
+
+// Legacy interfaces for backward compatibility
 interface TrajectoryStep {
   id: string
   title: string
@@ -62,6 +90,30 @@ interface Trajectory {
 export function CareerTrajectory() {
   const [selectedTrajectory, setSelectedTrajectory] = useState<string>("1")
   const [selectedStep, setSelectedStep] = useState<TrajectoryStep | null>(null)
+  const [trajectoryData, setTrajectoryData] = useState<TrajectoryData | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Load trajectory data from localStorage
+  useEffect(() => {
+    const loadTrajectoryData = () => {
+      try {
+        const savedData = localStorage.getItem('career_trajectory_data')
+        if (savedData) {
+          const data: TrajectoryData = JSON.parse(savedData)
+          setTrajectoryData(data)
+          console.log('Trajectory data loaded:', data)
+        } else {
+          console.log('No trajectory data found in localStorage')
+        }
+      } catch (error) {
+        console.error('Error loading trajectory data:', error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadTrajectoryData()
+  }, [])
 
   // Mock trajectory data
   const trajectories: Trajectory[] = [
@@ -268,6 +320,49 @@ export function CareerTrajectory() {
     }
   }
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Карьерные траектории</CardTitle>
+            <CardDescription>Загрузка данных...</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-center py-8">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                <p className="text-muted-foreground">Загружаем вашу траекторию...</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  if (!trajectoryData) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Карьерные траектории</CardTitle>
+            <CardDescription>Нет доступных данных</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-center py-8">
+              <BookOpen className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-medium mb-2">Траектория не построена</h3>
+              <p className="text-muted-foreground mb-4">
+                Сначала пройдите интервью с AI и постройте траекторию во вкладке "Чат с AI"
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Trajectory Header */}
@@ -275,302 +370,111 @@ export function CareerTrajectory() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="space-y-1">
-              <CardTitle>Карьерные траектории</CardTitle>
-              <CardDescription>Управляйте своим профессиональным развитием</CardDescription>
+              <CardTitle>Ваша карьерная траектория</CardTitle>
+              <CardDescription>Персональный план развития на основе AI-анализа</CardDescription>
             </div>
-            <div className="flex items-center gap-2">
-              <Select value={selectedTrajectory} onValueChange={setSelectedTrajectory}>
-                <SelectTrigger className="w-[300px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {trajectories.map((trajectory) => (
-                    <SelectItem key={trajectory.id} value={trajectory.id}>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={trajectory.status === "active" ? "default" : "secondary"}>
-                          {trajectory.status === "active"
-                            ? "Активная"
-                            : trajectory.status === "paused"
-                              ? "На паузе"
-                              : "Завершена"}
-                        </Badge>
-                        {trajectory.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Badge variant="default">Активная</Badge>
           </div>
         </CardHeader>
 
-        {currentTrajectory && (
-          <CardContent className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold">{currentTrajectory.name}</h3>
-                <p className="text-sm text-muted-foreground">{currentTrajectory.description}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                {currentTrajectory.status === "active" ? (
-                  <Button variant="outline" onClick={() => handleTrajectoryAction("pause")}>
-                    <Pause className="h-4 w-4 mr-2" />
-                    Пауза
-                  </Button>
-                ) : (
-                  <Button onClick={() => handleTrajectoryAction("play")}>
-                    <Play className="h-4 w-4 mr-2" />
-                    Запустить
-                  </Button>
-                )}
-              </div>
+        <CardContent className="space-y-6">
+          {/* Summary Stats */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="text-2xl font-bold text-blue-600">{trajectoryData.current_positions.length}</div>
+              <div className="text-sm text-blue-600">Текущие позиции</div>
             </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span>Прогресс: {currentTrajectory.progress}%</span>
-                <span className="flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  До {currentTrajectory.estimatedEndDate.toLocaleDateString()}
-                </span>
-              </div>
-              <Progress value={currentTrajectory.progress} className="h-2" />
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <div className="text-2xl font-bold text-green-600">{trajectoryData.future_positions.length}</div>
+              <div className="text-sm text-green-600">Целевые позиции</div>
             </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card className="p-4">
-                <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
-                  <CheckSquare className="h-4 w-4 text-green-600" />
-                  Имеющиеся компетенции
-                </h4>
-                <div className="flex flex-wrap gap-1">
-                  {["React", "JavaScript", "CSS", "HTML", "Git"].map((skill) => (
-                    <Badge key={skill} variant="secondary" className="text-xs">
-                      {skill}
-                    </Badge>
-                  ))}
-                </div>
-              </Card>
-
-              <Card className="p-4">
-                <h4 className="font-medium text-sm mb-3 flex items-center gap-2">
-                  <Target className="h-4 w-4 text-blue-600" />
-                  Необходимые компетенции
-                </h4>
-                <div className="flex flex-wrap gap-1">
-                  {["TypeScript", "System Design", "Leadership", "Mentoring"].map((skill) => (
-                    <Badge key={skill} variant="outline" className="text-xs">
-                      {skill}
-                    </Badge>
-                  ))}
-                </div>
-              </Card>
+            <div className="text-center p-4 bg-purple-50 rounded-lg">
+              <div className="text-2xl font-bold text-purple-600">{trajectoryData.groups.length}</div>
+              <div className="text-sm text-purple-600">Групп обучения</div>
             </div>
-          </CardContent>
-        )}
+          </div>
+        </CardContent>
       </Card>
 
-      {/* Timeline */}
-      {currentTrajectory && (
-        <div className="grid gap-6 lg:grid-cols-3">
-          {/* Steps Timeline */}
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Дорожная карта</CardTitle>
-                <CardDescription>Этапы вашего карьерного развития</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-6">
-                  {currentTrajectory.steps.map((step, index) => (
-                    <div key={step.id} className="flex gap-4">
-                      {/* Timeline indicator */}
-                      <div className="flex flex-col items-center">
-                        <div
-                          className={`w-10 h-10 rounded-full border-2 flex items-center justify-center ${
-                            step.status === "completed"
-                              ? "bg-green-100 border-green-500 text-green-600"
-                              : step.status === "current"
-                                ? "bg-blue-100 border-blue-500 text-blue-600"
-                                : "bg-gray-100 border-gray-300 text-gray-400"
-                          }`}
-                        >
-                          {step.status === "completed" ? <CheckCircle className="h-5 w-5" /> : getStepIcon(step)}
-                        </div>
-                        {index < currentTrajectory.steps.length - 1 && <div className="w-0.5 h-16 bg-border mt-2" />}
-                      </div>
+      {/* Quick Links to Other Tabs */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => window.location.hash = '#vacancies'}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Briefcase className="h-5 w-5 text-blue-600" />
+              Подходящие вакансии
+            </CardTitle>
+            <CardDescription>
+              {trajectoryData.current_positions.length} текущих + {trajectoryData.future_positions.length} целевых позиций
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                Посмотреть все вакансии во вкладке "Вакансии"
+              </div>
+              <Button variant="outline" size="sm">
+                Перейти →
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
-                      {/* Step content */}
-                      <div className="flex-1 pb-8">
-                        <Card
-                          className="cursor-pointer hover:shadow-md transition-shadow"
-                          onClick={() => setSelectedStep(step)}
-                        >
-                          <CardHeader className="pb-3">
-                            <div className="flex items-center justify-between">
-                              <CardTitle className="text-lg">{step.title}</CardTitle>
-                              <div className="flex items-center gap-2">
-                                <Badge variant="outline">{step.type}</Badge>
-                                {step.status === "current" && (
-                                  <Button
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleStepComplete(step.id)
-                                    }}
-                                  >
-                                    <CheckCircle className="h-3 w-3 mr-1" />
-                                    Завершить
-                                  </Button>
-                                )}
-                              </div>
-                            </div>
-                            <CardDescription>{step.description}</CardDescription>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                              <span className="flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
-                                {step.startDate.toLocaleDateString()} - {step.endDate.toLocaleDateString()}
-                              </span>
-                              <span>{step.resources.length} ресурсов</span>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+        <Card className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => window.location.hash = '#courses'}>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <BookOpen className="h-5 w-5 text-purple-600" />
+              План обучения
+            </CardTitle>
+            <CardDescription>
+              {trajectoryData.groups.length} групп курсов для развития навыков
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-muted-foreground">
+                Посмотреть все курсы во вкладке "Курсы"
+              </div>
+              <Button variant="outline" size="sm">
+                Перейти →
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-          {/* Step Details */}
-          <div>
-            <Card className="sticky top-4">
-              <CardHeader>
-                <CardTitle>Детали этапа</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {selectedStep ? (
-                  <div className="space-y-4">
-                    <div>
-                      <h4 className="font-semibold">{selectedStep.title}</h4>
-                      <p className="text-sm text-muted-foreground mt-1">{selectedStep.description}</p>
-                    </div>
-
-                    <div className="flex gap-2">
-                      {selectedStep.type === "job" && (
-                        <Button
-                          className="flex-1"
-                          onClick={() =>
-                            handleNavigateToTab("jobs-courses", {
-                              type: "jobs",
-                              trajectory: selectedTrajectory,
-                              topic: "Frontend", // This would be dynamic based on trajectory
-                            })
-                          }
-                        >
-                          <Briefcase className="h-4 w-4 mr-2" />
-                          Вакансии
-                        </Button>
-                      )}
-                      {(selectedStep.type === "skill" || selectedStep.type === "course") && (
-                        <Button
-                          className="flex-1"
-                          onClick={() =>
-                            handleNavigateToTab("jobs-courses", {
-                              type: "courses",
-                              trajectory: selectedTrajectory,
-                              topic: selectedStep.title, // Use step title as topic filter
-                            })
-                          }
-                        >
-                          <BookOpen className="h-4 w-4 mr-2" />
-                          Курсы
-                        </Button>
-                      )}
-                    </div>
-
-                    {selectedStep.requirements && (
-                      <div>
-                        <h5 className="font-medium text-sm mb-2">Требования:</h5>
-                        <ul className="text-sm space-y-1">
-                          {selectedStep.requirements.map((req, index) => (
-                            <li key={index} className="flex items-center gap-2">
-                              <Circle className="h-2 w-2 fill-current" />
-                              {req}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    <div>
-                      <h5 className="font-medium text-sm mb-3">Ресурсы:</h5>
-                      <div className="space-y-3">
-                        {selectedStep.resources.map((resource) => (
-                          <Card key={resource.id} className="p-3">
-                            <div className="space-y-2">
-                              <div className="flex items-start justify-between">
-                                <div className="flex-1">
-                                  <h6 className="font-medium text-sm">{resource.title}</h6>
-                                  <p className="text-xs text-muted-foreground">{resource.provider}</p>
-                                  {resource.duration && (
-                                    <p className="text-xs text-muted-foreground">Длительность: {resource.duration}</p>
-                                  )}
-                                  {resource.salary && (
-                                    <p className="text-xs text-green-600 font-medium">{resource.salary}</p>
-                                  )}
-                                </div>
-                                <Badge variant="outline" className="text-xs">
-                                  {resource.type}
-                                </Badge>
-                              </div>
-
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={`h-6 w-6 p-0 ${resource.liked ? "text-green-600" : ""}`}
-                                    onClick={() => handleResourceAction(resource.id, "like")}
-                                  >
-                                    <ThumbsUp className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={`h-6 w-6 p-0 ${resource.disliked ? "text-red-600" : ""}`}
-                                    onClick={() => handleResourceAction(resource.id, "dislike")}
-                                  >
-                                    <ThumbsDown className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => handleResourceAction(resource.id, "visit")}
-                                  >
-                                    <ExternalLink className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </Card>
-                        ))}
-                      </div>
-                    </div>
+      {/* Learning Timeline */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-green-600" />
+            Временная шкала развития
+          </CardTitle>
+          <CardDescription>Рекомендуемая последовательность изучения</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {trajectoryData.groups.map((group, index) => (
+              <div key={group.group_id} className="flex items-center gap-4 p-4 border rounded-lg">
+                <div className="flex-shrink-0">
+                  <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-sm font-medium">
+                    {index + 1}
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Выберите этап для просмотра деталей</p>
-                )}
-              </CardContent>
-            </Card>
+                </div>
+                <div className="flex-grow">
+                  <h4 className="font-medium">{group.title}</h4>
+                  <p className="text-sm text-muted-foreground">{group.notes}</p>
+                </div>
+                <div className="flex-shrink-0 text-right">
+                  <div className="text-sm font-medium">{group.estimated_months} мес.</div>
+                  <div className="text-xs text-muted-foreground">{group.hours_per_week} ч/нед</div>
+                </div>
+              </div>
+            ))}
           </div>
-        </div>
-      )}
+        </CardContent>
+      </Card>
+
     </div>
   )
 }
