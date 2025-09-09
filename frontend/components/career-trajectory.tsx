@@ -21,6 +21,7 @@ import {
   Briefcase,
   TrendingUp,
   CheckSquare,
+  Star,
 } from "lucide-react"
 
 // Real API data interfaces
@@ -39,8 +40,17 @@ interface LearningGroup {
   title: string
   estimated_months: number
   hours_per_week: number
-  items: any[] // Course items
+  items: GapItem[] // Gap items from API
   notes: string
+}
+
+interface GapItem {
+  name: string
+  kind: "skill" | "experience" | "level"
+  priority: number
+  prerequisites: string[]
+  recommendations: any[]
+  rationale?: string
 }
 
 interface TrajectoryData {
@@ -61,12 +71,15 @@ interface TrajectoryStep {
   endDate: Date
   resources: Resource[]
   requirements?: string[]
+  estimatedMonths?: number
+  hoursPerWeek?: number
+  skills?: any[] // GapItem array from API
 }
 
 interface Resource {
   id: string
   title: string
-  type: "course" | "job" | "article" | "certification"
+  type: "course" | "job" | "article" | "certification" | "project" | "tip"
   provider: string
   url: string
   rating: number
@@ -74,6 +87,14 @@ interface Resource {
   salary?: string
   liked?: boolean
   disliked?: boolean
+  description?: string
+  location?: string
+  hoursPerWeek?: number
+  duration_hours?: number
+  estimated_months?: number
+  expected_outcomes?: string
+  cost?: string
+  required?: boolean
 }
 
 interface Trajectory {
@@ -443,37 +464,565 @@ export function CareerTrajectory() {
         </Card>
       </div>
 
-      {/* Learning Timeline */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-green-600" />
-            Временная шкала развития
-          </CardTitle>
-          <CardDescription>Рекомендуемая последовательность изучения</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {trajectoryData.groups.map((group, index) => (
-              <div key={group.group_id} className="flex items-center gap-4 p-4 border rounded-lg">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center text-sm font-medium">
-                    {index + 1}
+      {/* Interactive Timeline */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Timeline */}
+        <div className="lg:col-span-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-green-600" />
+                Детальная временная шкала развития
+              </CardTitle>
+              <CardDescription>Пошаговый план карьерного роста с подробностями</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-6">
+                {/* Current Positions Step */}
+                <div className="flex gap-4">
+                  <div className="flex flex-col items-center">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 border-2 border-blue-500 text-blue-600 flex items-center justify-center cursor-pointer hover:bg-blue-200 transition-colors"
+                         onClick={() => setSelectedStep({
+                           id: "current",
+                           title: "Текущие позиции",
+                           description: `Анализ ${trajectoryData.current_positions.length} подходящих вакансий на текущем уровне`,
+                           type: "job" as const,
+                           status: "completed" as const,
+                           startDate: new Date(),
+                           endDate: new Date(),
+                           resources: trajectoryData.current_positions.map(pos => ({
+                             id: pos.idx.toString(),
+                             title: pos.title,
+                             type: "job" as const,
+                             provider: pos.company,
+                             url: "#",
+                             rating: 4.5,
+                             salary: pos.salary,
+                             description: pos.description,
+                             location: pos.location || "Удаленно"
+                           }))
+                         })}>
+                      <Briefcase className="h-5 w-5" />
+                    </div>
+                    <div className="w-0.5 h-16 bg-border mt-2" />
+                  </div>
+                  <div className="flex-1 pb-8">
+                    <Card className="cursor-pointer hover:shadow-md transition-shadow"
+                          onClick={() => setSelectedStep({
+                            id: "current",
+                            title: "Текущие позиции",
+                            description: `Анализ ${trajectoryData.current_positions.length} подходящих вакансий на текущем уровне`,
+                            type: "job" as const,
+                            status: "completed" as const,
+                            startDate: new Date(),
+                            endDate: new Date(),
+                            resources: trajectoryData.current_positions.map(pos => ({
+                              id: pos.idx.toString(),
+                              title: pos.title,
+                              type: "job" as const,
+                              provider: pos.company,
+                              url: "#",
+                              rating: 4.5,
+                              salary: pos.salary,
+                              description: pos.description,
+                              location: pos.location || "Удаленно"
+                            }))
+                          })}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg">Текущие позиции</CardTitle>
+                          <Badge variant="outline">Вакансии</Badge>
+                        </div>
+                        <CardDescription>
+                          Подходящие вакансии на вашем текущем уровне ({trajectoryData.current_positions.length} шт.)
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Briefcase className="h-3 w-3" />
+                            {trajectoryData.current_positions.length} вакансий
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Target className="h-3 w-3" />
+                            Готов к подаче
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
                 </div>
-                <div className="flex-grow">
-                  <h4 className="font-medium">{group.title}</h4>
-                  <p className="text-sm text-muted-foreground">{group.notes}</p>
-                </div>
-                <div className="flex-shrink-0 text-right">
-                  <div className="text-sm font-medium">{group.estimated_months} мес.</div>
-                  <div className="text-xs text-muted-foreground">{group.hours_per_week} ч/нед</div>
+
+                {/* Learning Groups Steps */}
+                {trajectoryData.groups.map((group, index) => (
+                  <div key={group.group_id} className="flex gap-4">
+                    <div className="flex flex-col items-center">
+                      <div className="w-10 h-10 rounded-full bg-purple-100 border-2 border-purple-500 text-purple-600 flex items-center justify-center cursor-pointer hover:bg-purple-200 transition-colors"
+                           onClick={() => setSelectedStep({
+                             id: group.group_id.toString(),
+                             title: group.title,
+                             description: group.notes,
+                             type: "skill" as const,
+                             status: index === 0 ? "current" as const : "upcoming" as const,
+                             startDate: new Date(),
+                             endDate: new Date(),
+                             resources: group.items?.length > 0 ? 
+                               // Use real AI recommendations from GapItem.recommendations
+                               group.items.flatMap((gapItem: any, gapIndex: number) => 
+                                 gapItem.recommendations?.map((rec: any, recIndex: number) => ({
+                                   id: `${group.group_id}-${gapIndex}-${recIndex}`,
+                                   title: rec.title || `${gapItem.name} - Рекомендация ${recIndex + 1}`,
+                                   type: rec.type as "course" | "project" | "tip",
+                                   provider: rec.provider || "AI Рекомендация",
+                                   url: rec.url || "#",
+                                   rating: 4.5,
+                                   duration_hours: rec.duration_hours,
+                                   estimated_months: rec.estimated_months,
+                                   expected_outcomes: rec.expected_outcomes,
+                                   cost: rec.cost,
+                                   required: rec.required || false,
+                                   description: rec.expected_outcomes // Use expected_outcomes as description
+                                 })) || []
+                               ) :
+                               // Fallback mock data when no real recommendations
+                               [
+                                 {
+                                   id: `${group.group_id}-fallback-course`,
+                                   title: `${group.title} - Курс`,
+                                   type: "course" as const,
+                                   provider: "Рекомендованный провайдер",
+                                   url: "#",
+                                   rating: 4.5,
+                                   duration: `${Math.ceil(group.estimated_months * 4)} недель`,
+                                   description: `Изучение ${group.title.toLowerCase()}. ${group.notes}`,
+                                   hoursPerWeek: group.hours_per_week
+                                 },
+                                 {
+                                   id: `${group.group_id}-fallback-project`,
+                                   title: `Проект: ${group.title}`,
+                                   type: "project" as const,
+                                   provider: "Самостоятельно",
+                                   url: "#",
+                                   rating: 4.0,
+                                   duration_hours: 40,
+                                   estimated_months: 1,
+                                   expected_outcomes: `Практическое применение навыков ${group.title.toLowerCase()}`,
+                                   cost: "Бесплатно"
+                                 }
+                               ],
+                             estimatedMonths: group.estimated_months,
+                             hoursPerWeek: group.hours_per_week,
+                             skills: group.items || []
+                           })}>
+                        <BookOpen className="h-5 w-5" />
+                      </div>
+                      {index < trajectoryData.groups.length && <div className="w-0.5 h-16 bg-border mt-2" />}
+                    </div>
+                    <div className="flex-1 pb-8">
+                      <Card className="cursor-pointer hover:shadow-md transition-shadow"
+                            onClick={() => setSelectedStep({
+                              id: group.group_id.toString(),
+                              title: group.title,
+                              description: group.notes,
+                              type: "skill" as const,
+                              status: index === 0 ? "current" as const : "upcoming" as const,
+                              startDate: new Date(),
+                              endDate: new Date(),
+                              resources: group.items?.length > 0 ? 
+                                // Use real AI recommendations from GapItem.recommendations
+                                group.items.flatMap((gapItem: any, gapIndex: number) => 
+                                  gapItem.recommendations?.map((rec: any, recIndex: number) => ({
+                                    id: `${group.group_id}-${gapIndex}-${recIndex}`,
+                                    title: rec.title || `${gapItem.name} - Рекомендация ${recIndex + 1}`,
+                                    type: rec.type as "course" | "project" | "tip",
+                                    provider: rec.provider || "AI Рекомендация",
+                                    url: rec.url || "#",
+                                    rating: 4.5,
+                                    duration_hours: rec.duration_hours,
+                                    estimated_months: rec.estimated_months,
+                                    expected_outcomes: rec.expected_outcomes,
+                                    cost: rec.cost,
+                                    required: rec.required || false,
+                                    description: rec.expected_outcomes // Use expected_outcomes as description
+                                  })) || []
+                                ) :
+                                // Fallback mock data when no real recommendations
+                                [
+                                  {
+                                    id: `${group.group_id}-fallback-course`,
+                                    title: `${group.title} - Курс`,
+                                    type: "course" as const,
+                                    provider: "Рекомендованный провайдер",
+                                    url: "#",
+                                    rating: 4.5,
+                                    duration: `${Math.ceil(group.estimated_months * 4)} недель`,
+                                    description: `Изучение ${group.title.toLowerCase()}. ${group.notes}`,
+                                    hoursPerWeek: group.hours_per_week
+                                  },
+                                  {
+                                    id: `${group.group_id}-fallback-project`,
+                                    title: `Проект: ${group.title}`,
+                                    type: "project" as const,
+                                    provider: "Самостоятельно",
+                                    url: "#",
+                                    rating: 4.0,
+                                    duration_hours: 40,
+                                    estimated_months: 1,
+                                    expected_outcomes: `Практическое применение навыков ${group.title.toLowerCase()}`,
+                                    cost: "Бесплатно"
+                                  }
+                                ],
+                              estimatedMonths: group.estimated_months,
+                              hoursPerWeek: group.hours_per_week,
+                              skills: group.items || []
+                            })}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <CardTitle className="text-lg">{group.title}</CardTitle>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">Обучение</Badge>
+                              {index === 0 && (
+                                <Badge variant="default" className="bg-blue-600">
+                                  Текущий этап
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <CardDescription>{group.notes}</CardDescription>
+                        </CardHeader>
+                        <CardContent className="pt-0">
+                          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {group.estimated_months} мес.
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <BookOpen className="h-3 w-3" />
+                              {group.hours_per_week} ч/нед
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Target className="h-3 w-3" />
+                              {group.items?.length || 3} курсов
+                            </span>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Future Positions Step */}
+                <div className="flex gap-4">
+                  <div className="flex flex-col items-center">
+                    <div className="w-10 h-10 rounded-full bg-green-100 border-2 border-green-500 text-green-600 flex items-center justify-center cursor-pointer hover:bg-green-200 transition-colors"
+                         onClick={() => setSelectedStep({
+                           id: "future",
+                           title: "Целевые позиции",
+                           description: `${trajectoryData.future_positions.length} вакансий следующего уровня для достижения ваших целей`,
+                           type: "job" as const,
+                           status: "upcoming" as const,
+                           startDate: new Date(),
+                           endDate: new Date(),
+                           resources: trajectoryData.future_positions.map(pos => ({
+                             id: pos.idx.toString(),
+                             title: pos.title,
+                             type: "job" as const,
+                             provider: pos.company,
+                             url: "#",
+                             rating: 4.5,
+                             salary: pos.salary,
+                             description: pos.description,
+                             location: pos.location || "Удаленно"
+                           }))
+                         })}>
+                      <Target className="h-5 w-5" />
+                    </div>
+                  </div>
+                  <div className="flex-1 pb-8">
+                    <Card className="cursor-pointer hover:shadow-md transition-shadow"
+                          onClick={() => setSelectedStep({
+                            id: "future",
+                            title: "Целевые позиции",
+                            description: `${trajectoryData.future_positions.length} вакансий следующего уровня для достижения ваших целей`,
+                            type: "job" as const,
+                            status: "upcoming" as const,
+                            startDate: new Date(),
+                            endDate: new Date(),
+                            resources: trajectoryData.future_positions.map(pos => ({
+                              id: pos.idx.toString(),
+                              title: pos.title,
+                              type: "job" as const,
+                              provider: pos.company,
+                              url: "#",
+                              rating: 4.5,
+                              salary: pos.salary,
+                              description: pos.description,
+                              location: pos.location || "Удаленно"
+                            }))
+                          })}>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                          <CardTitle className="text-lg">Целевые позиции</CardTitle>
+                          <Badge variant="outline">Цель</Badge>
+                        </div>
+                        <CardDescription>
+                          Вакансии следующего уровня ({trajectoryData.future_positions.length} шт.)
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Briefcase className="h-3 w-3" />
+                            {trajectoryData.future_positions.length} вакансий
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <TrendingUp className="h-3 w-3" />
+                            После обучения
+                          </span>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
                 </div>
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Step Details Panel */}
+        <div>
+          <Card className="sticky top-4">
+            <CardHeader>
+              <CardTitle>Детали этапа</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {selectedStep ? (
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-semibold">{selectedStep.title}</h4>
+                    <p className="text-sm text-muted-foreground mt-1">{selectedStep.description}</p>
+                  </div>
+
+                  {/* Timeline info for learning groups */}
+                  {selectedStep.type === "skill" && (selectedStep as any).estimatedMonths && (
+                    <div className="p-3 bg-purple-50 rounded-lg">
+                      <div className="flex items-center gap-2 text-sm font-medium text-purple-700">
+                        <Clock className="h-4 w-4" />
+                        План изучения
+                      </div>
+                      <div className="mt-2 text-sm text-purple-600">
+                        <div>Продолжительность: {(selectedStep as any).estimatedMonths} месяцев</div>
+                        <div>Нагрузка: {(selectedStep as any).hoursPerWeek} часов в неделю</div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Skills to acquire */}
+                  {selectedStep.type === "skill" && (
+                    <div className="p-3 bg-blue-50 rounded-lg">
+                      <div className="flex items-center gap-2 text-sm font-medium text-blue-700 mb-2">
+                        <CheckSquare className="h-4 w-4" />
+                        Навыки для изучения
+                      </div>
+                      <div className="space-y-2">
+                        {(selectedStep as any).skills && (selectedStep as any).skills.length > 0 ? (
+                          (selectedStep as any).skills.map((skill: any, index: number) => (
+                            <div key={index} className="flex items-start gap-2">
+                              <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                                skill.priority === 1 ? 'bg-red-500' : 
+                                skill.priority === 2 ? 'bg-orange-500' : 
+                                skill.priority === 3 ? 'bg-yellow-500' : 
+                                'bg-green-500'
+                              }`} />
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-blue-900">{skill.name}</div>
+                                <div className="text-xs text-blue-600 capitalize">
+                                  {skill.kind === 'skill' ? '🎯 Навык' : 
+                                   skill.kind === 'experience' ? '💼 Опыт' : 
+                                   '📈 Уровень'}
+                                  {skill.priority && ` • Приоритет ${skill.priority}`}
+                                </div>
+                                {skill.rationale && (
+                                  <div className="text-xs text-blue-500 mt-1">{skill.rationale}</div>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          // Fallback example skills when no real data
+                          [
+                            { name: "Продвинутый Python", kind: "skill", priority: 1, rationale: "Основной язык для анализа данных" },
+                            { name: "Machine Learning", kind: "skill", priority: 1, rationale: "Ключевой навык для Data Science" },
+                            { name: "SQL оптимизация", kind: "skill", priority: 2, rationale: "Для работы с большими данными" },
+                            { name: "Опыт работы с A/B тестами", kind: "experience", priority: 2, rationale: "Необходим для продуктовой аналитики" },
+                            { name: "Senior уровень", kind: "level", priority: 3, rationale: "Целевой уровень развития" }
+                          ].map((skill, index) => (
+                            <div key={index} className="flex items-start gap-2">
+                              <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
+                                skill.priority === 1 ? 'bg-red-500' : 
+                                skill.priority === 2 ? 'bg-orange-500' : 
+                                skill.priority === 3 ? 'bg-yellow-500' : 
+                                'bg-green-500'
+                              }`} />
+                              <div className="flex-1">
+                                <div className="text-sm font-medium text-blue-900">{skill.name}</div>
+                                <div className="text-xs text-blue-600 capitalize">
+                                  {skill.kind === 'skill' ? '🎯 Навык' : 
+                                   skill.kind === 'experience' ? '💼 Опыт' : 
+                                   '📈 Уровень'}
+                                  {skill.priority && ` • Приоритет ${skill.priority}`}
+                                </div>
+                                {skill.rationale && (
+                                  <div className="text-xs text-blue-500 mt-1">{skill.rationale}</div>
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                      <div className="mt-2 text-xs text-blue-600">
+                        💡 Цветные точки показывают приоритет: 🔴 Высокий → 🟢 Низкий
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action buttons */}
+                  <div className="flex gap-2">
+                    {selectedStep.type === "job" && (
+                      <Button className="flex-1" onClick={() => console.log("Navigate to jobs")}>
+                        <Briefcase className="h-4 w-4 mr-2" />
+                        Смотреть вакансии
+                      </Button>
+                    )}
+                    {selectedStep.type === "skill" && (
+                      <Button className="flex-1" onClick={() => console.log("Navigate to courses")}>
+                        <BookOpen className="h-4 w-4 mr-2" />
+                        Смотреть курсы
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Resources list */}
+                  <div>
+                    <h5 className="font-medium text-sm mb-3">
+                      {selectedStep.type === "job" ? "Подходящие вакансии:" : "🤖 AI-рекомендации для изучения:"}
+                    </h5>
+                    {selectedStep.type === "skill" && selectedStep.resources.length > 0 && (
+                      <div className="mb-3 p-2 bg-green-50 rounded text-xs text-green-700">
+                        💡 Персональные рекомендации от YandexGPT на основе анализа ваших целей
+                      </div>
+                    )}
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
+                      {selectedStep.resources.map((resource) => (
+                        <Card key={resource.id} className="p-3">
+                          <div className="space-y-2">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <h6 className="font-medium text-sm">{resource.title}</h6>
+                                <p className="text-xs text-muted-foreground">{resource.provider}</p>
+                                
+                                {/* Job specific info */}
+                                {resource.type === "job" && (
+                                  <>
+                                    {(resource as any).salary && (
+                                      <p className="text-xs text-green-600 font-medium">{(resource as any).salary}</p>
+                                    )}
+                                    {(resource as any).location && (
+                                      <p className="text-xs text-muted-foreground">📍 {(resource as any).location}</p>
+                                    )}
+                                    {(resource as any).description && (
+                                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                        {(resource as any).description}
+                                      </p>
+                                    )}
+                                  </>
+                                )}
+                                
+                                {/* Course specific info */}
+                                {resource.type === "course" && (
+                                  <>
+                                    {resource.duration && (
+                                      <p className="text-xs text-muted-foreground">⏱️ {resource.duration}</p>
+                                    )}
+                                    {(resource as any).hoursPerWeek && (
+                                      <p className="text-xs text-muted-foreground">📚 {(resource as any).hoursPerWeek} ч/нед</p>
+                                    )}
+                                    {(resource as any).description && (
+                                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                                        {(resource as any).description}
+                                      </p>
+                                    )}
+                                  </>
+                                )}
+
+                                {/* Project specific info */}
+                                {resource.type === "project" && (
+                                  <>
+                                    {(resource as any).duration_hours && (
+                                      <p className="text-xs text-muted-foreground">⏱️ {(resource as any).duration_hours} часов</p>
+                                    )}
+                                    {(resource as any).estimated_months && (
+                                      <p className="text-xs text-muted-foreground">📅 {(resource as any).estimated_months} мес.</p>
+                                    )}
+                                    {(resource as any).expected_outcomes && (
+                                      <p className="text-xs text-blue-600 mt-1 font-medium">🎯 {(resource as any).expected_outcomes}</p>
+                                    )}
+                                    {(resource as any).cost && (
+                                      <p className="text-xs text-green-600">💰 {(resource as any).cost}</p>
+                                    )}
+                                  </>
+                                )}
+
+                                {/* Tip specific info */}
+                                {resource.type === "tip" && (
+                                  <>
+                                    {(resource as any).expected_outcomes && (
+                                      <p className="text-xs text-purple-600 mt-1 font-medium">💡 {(resource as any).expected_outcomes}</p>
+                                    )}
+                                    {(resource as any).duration_hours && (
+                                      <p className="text-xs text-muted-foreground">⏱️ {(resource as any).duration_hours} часов</p>
+                                    )}
+                                  </>
+                                )}
+                              </div>
+                              <Badge variant="outline" className="text-xs">
+                                {resource.type === "job" ? "Вакансия" : 
+                                 resource.type === "course" ? "Курс" :
+                                 resource.type === "project" ? "Проект" :
+                                 resource.type === "tip" ? "Совет" : "Ресурс"}
+                              </Badge>
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                                <span className="flex items-center gap-1">
+                                  <Star className="h-3 w-3 fill-current text-yellow-500" />
+                                  {resource.rating}
+                                </span>
+                              </div>
+                              <Button variant="ghost" size="sm" className="h-6 px-2 text-xs">
+                                <ExternalLink className="h-3 w-3 mr-1" />
+                                Открыть
+                              </Button>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <Target className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-sm text-muted-foreground">
+                    Выберите этап на временной шкале для просмотра подробной информации
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
     </div>
   )
