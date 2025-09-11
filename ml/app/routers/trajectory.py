@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import List
+
+from fastapi import APIRouter, Depends, HTTPException, Header
 
 from app.db.mongo import get_db
 from app.models.trajectory_models import TrajectoryBuildRequest, TrajectoryResponse
@@ -40,6 +42,7 @@ async def get_traj_repo(db=Depends(get_db)) -> TrajectoryRepository:  # noqa: AN
 @router.post("/build", response_model=TrajectoryResponse)
 async def build_trajectory(
     payload: TrajectoryBuildRequest,
+    authorization: str = Header(None),
     service: TrajectoryService = Depends(get_traj_service),
     sessions_repo: SessionsRepository = Depends(get_sessions_repo),
     messages_repo: MessagesRepository = Depends(get_messages_repo),
@@ -53,5 +56,17 @@ async def build_trajectory(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Trajectory build failed: {e}")
+
+
+@router.get("/user/{user_id}", response_model=List[TrajectoryResponse])
+async def get_user_trajectories(
+    user_id: str,
+    traj_repo: TrajectoryRepository = Depends(get_traj_repo),
+) -> List[TrajectoryResponse]:
+    try:
+        trajectories = await traj_repo.list_by_user(user_id)
+        return [TrajectoryResponse.model_validate(traj) for traj in trajectories]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load trajectories: {e}")
 
 

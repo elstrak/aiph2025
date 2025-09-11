@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from typing import List
+from pypdf import PdfReader
 
 from app.repos.chat_repos import SessionsRepository, MessagesRepository
 from app.services.yandex_sdk import run_structured_completion
@@ -138,6 +139,13 @@ class ProfileService:
                 },
             }
         }['json_schema']
+
+    def extract_text_from_pdf(self, file_bytes: bytes) -> str:
+        reader = PdfReader(io.BytesIO(file_bytes))  # type: ignore[name-defined]
+        texts: list[str] = []
+        for page in reader.pages:
+            texts.append(page.extract_text() or "")
+        return "\n".join(texts)
 
     async def build_profile(self, session_id: str, sessions_repo: SessionsRepository, messages_repo: MessagesRepository) -> dict:
         session = await sessions_repo.find_by_id(session_id)

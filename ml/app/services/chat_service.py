@@ -74,7 +74,9 @@ class ChatService:
         print(f"DEBUG: messages to YandexGPT: {messages}")
         
         raw = run_structured_completion(messages, self.get_response_schema())
+        print(f"DEBUG: YandexGPT raw response: {raw}")
         reply_text, done = self.parse_model_output(raw)
+        print(f"DEBUG: parsed reply_text: '{reply_text}', done: {done}")
 
         assistant_msg = Message(
             message_id=now + ":assistant",

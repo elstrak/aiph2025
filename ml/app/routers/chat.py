@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Header
 
 from app.db.mongo import get_db
 from app.models import ChatResponse, ChatRequest
@@ -27,6 +27,7 @@ async def get_messages_repo(db=Depends(get_db)) -> MessagesRepository:  # noqa: 
 async def chat(
     session_id: str,
     req: ChatRequest,
+    authorization: str = Header(None),
     service: ChatService = Depends(get_chat_service),
     sessions_repo: SessionsRepository = Depends(get_sessions_repo),
     messages_repo: MessagesRepository = Depends(get_messages_repo),

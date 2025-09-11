@@ -98,6 +98,7 @@ export function JobCourseManager() {
   const [courses, setCourses] = useState<Course[]>([])
   const [selectedTrajectory, setSelectedTrajectory] = useState<string>("all")
   const [trajectoryData, setTrajectoryData] = useState<TrajectoryData | null>(null)
+  const [userTrajectories, setUserTrajectories] = useState<TrajectoryData[]>([])
   const [filters, setFilters] = useState({
     location: "all",
     experience: "all",
@@ -107,7 +108,131 @@ export function JobCourseManager() {
     level: "all",
   })
 
-  // Load trajectory data from localStorage
+  // Load user trajectories from API
+  useEffect(() => {
+    const loadUserTrajectories = async () => {
+      try {
+        const token = localStorage.getItem('access_token')
+        if (!token) {
+          console.log('No access token found')
+          return
+        }
+
+        // Get user_id from token (simple decode for demo)
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        const userId = payload.sub
+
+        const response = await fetch(`/api/trajectory/user?userId=${userId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (response.ok) {
+          const trajectories = await response.json()
+          setUserTrajectories(trajectories)
+          console.log('User trajectories loaded:', trajectories)
+          
+          // If we have trajectories, use the first one for jobs/courses
+          if (trajectories.length > 0) {
+            const data = trajectories[0]
+            setTrajectoryData(data)
+            convertTrajectoryToJobsAndCourses(data)
+          }
+        } else {
+          console.log('No trajectories found for user')
+        }
+      } catch (error) {
+        console.error('Error loading user trajectories:', error)
+      }
+    }
+
+    loadUserTrajectories()
+  }, [])
+
+  // Update jobs and courses when trajectory selection changes
+  useEffect(() => {
+    if (selectedTrajectory !== "all" && userTrajectories.length > 0) {
+      const selectedTraj = userTrajectories.find(traj => traj.session_id === selectedTrajectory)
+      if (selectedTraj) {
+        setTrajectoryData(selectedTraj)
+        convertTrajectoryToJobsAndCourses(selectedTraj)
+      }
+    } else if (selectedTrajectory === "all" && userTrajectories.length > 0) {
+      // Show all jobs and courses from all trajectories
+      const allJobs: Job[] = []
+      const allCourses: Course[] = []
+      
+      userTrajectories.forEach(traj => {
+        const jobs = convertTrajectoryToJobs(traj)
+        const courses = convertTrajectoryToCourses(traj)
+        allJobs.push(...jobs)
+        allCourses.push(...courses)
+      })
+      
+      setJobs(allJobs)
+      setCourses(allCourses)
+    }
+  }, [selectedTrajectory, userTrajectories])
+
+  // Helper function to convert trajectory data to jobs
+  const convertTrajectoryToJobs = (data: TrajectoryData): Job[] => {
+    const allPositions = [...data.current_positions, ...data.future_positions]
+    return allPositions.map((pos, index) => ({
+      id: pos.idx.toString(),
+      title: pos.title,
+      company: pos.company,
+      location: pos.location || "Удаленно",
+      salary: pos.salary,
+      experience: pos.experience,
+      description: pos.description,
+      skills: [], // Could be extracted from description
+      professionalArea: "Анализ данных",
+      specialization: "Data Science",
+      role: pos.title.includes("Senior") ? "Senior" : "Middle",
+      functions: [],
+      hardSkills: [],
+      softSkills: [],
+      tools: [],
+      techStack: [],
+      matchScore: data.current_positions.includes(pos) ? 85 : 70, // Higher score for current positions
+      postedDate: new Date(),
+      url: "#"
+    }))
+  }
+
+  // Helper function to convert trajectory data to courses
+  const convertTrajectoryToCourses = (data: TrajectoryData): Course[] => {
+    return data.groups.flatMap((group, groupIndex) => 
+      Array.from({ length: Math.min(group.items?.length || 3, 3) }, (_, itemIndex) => ({
+        id: `${group.group_id}-${itemIndex}`,
+        title: `${group.title} - Курс ${itemIndex + 1}`,
+        provider: "Рекомендованный провайдер",
+        description: group.notes,
+        duration: `${group.estimated_months} месяцев`,
+        price: "Бесплатно",
+        rating: 4.5,
+        level: "Средний",
+        skills: [],
+        category: "Анализ данных",
+        format: "Online",
+        language: "Русский",
+        matchScore: 80,
+        url: "#"
+      }))
+    )
+  }
+
+  // Helper function to convert trajectory data to jobs and courses
+  const convertTrajectoryToJobsAndCourses = (data: TrajectoryData) => {
+    const convertedJobs = convertTrajectoryToJobs(data)
+    const convertedCourses = convertTrajectoryToCourses(data)
+    
+    setJobs(convertedJobs)
+    setCourses(convertedCourses)
+  }
+
+  // Load trajectory data from localStorage (fallback)
   useEffect(() => {
     const loadTrajectoryData = () => {
       try {
@@ -301,10 +426,13 @@ export function JobCourseManager() {
     }, 2000)
   }
 
+  // Build trajectories list from user data
   const trajectories = [
     { id: "all", name: "Все траектории" },
-    { id: "1", name: "Frontend Developer → Senior Frontend" },
-    { id: "2", name: "Переход в Product Management" },
+    ...userTrajectories.map((traj, index) => ({
+      id: traj.session_id,
+      name: `Траектория #${index + 1} (${traj.current_positions?.length || 0} текущих, ${traj.future_positions?.length || 0} целевых)`
+    }))
   ]
 
   const filteredJobs = jobs
@@ -317,7 +445,14 @@ export function JobCourseManager() {
       const matchesLocation = filters.location === "all" || job.location.includes(filters.location)
       const matchesExperience = filters.experience === "all" || job.experience.includes(filters.experience)
 
-      return matchesSearch && matchesLocation && matchesExperience
+      // Filter by selected trajectory
+      const matchesTrajectory = selectedTrajectory === "all" || 
+        (selectedTrajectory !== "all" && userTrajectories.some(traj => 
+          traj.session_id === selectedTrajectory && 
+          [...traj.current_positions, ...traj.future_positions].some(pos => pos.idx.toString() === job.id)
+        ))
+
+      return matchesSearch && matchesLocation && matchesExperience && matchesTrajectory
     })
     .sort((a, b) => {
       // Sort by trajectory relevance if specific trajectory is selected
@@ -337,7 +472,14 @@ export function JobCourseManager() {
       const matchesCategory = filters.category === "all" || course.category === filters.category
       const matchesLevel = filters.level === "all" || course.level === filters.level
 
-      return matchesSearch && matchesCategory && matchesLevel
+      // Filter by selected trajectory
+      const matchesTrajectory = selectedTrajectory === "all" || 
+        (selectedTrajectory !== "all" && userTrajectories.some(traj => 
+          traj.session_id === selectedTrajectory && 
+          traj.groups.some(group => group.group_id.toString() === course.id.split('-')[0])
+        ))
+
+      return matchesSearch && matchesCategory && matchesLevel && matchesTrajectory
     })
     .sort((a, b) => {
       // Sort by trajectory relevance if specific trajectory is selected
@@ -495,74 +637,58 @@ export function JobCourseManager() {
         <TabsContent value="jobs" className="mt-6">
           <div className="grid gap-4">
             {filteredJobs.map((job) => (
-              <Card key={job.id} className="hover:shadow-md transition-shadow">
-                <CardHeader>
+              <Card key={job.id} className="hover:shadow-sm transition-shadow border rounded-xl">
+                <CardContent className="p-4">
                   <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <CardTitle className="text-lg">{job.title}</CardTitle>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div>
+                      <div className="text-base font-semibold leading-snug">{job.title}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
-                          <Building className="h-3 w-3" />
+                          <Building className="h-4 w-4" />
                           {job.company}
                         </span>
                         <span className="flex items-center gap-1">
-                          <MapPin className="h-3 w-3" />
+                          <MapPin className="h-4 w-4" />
                           {job.location}
                         </span>
                         <span className="flex items-center gap-1">
-                          <DollarSign className="h-3 w-3" />
+                          <DollarSign className="h-4 w-4" />
                           {job.salary}
                         </span>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge variant="outline" className="text-xs">Опыт {job.experience}</Badge>
+                        <Badge variant="outline" className="text-xs">Можно удалённо</Badge>
                       {selectedTrajectory !== "all" && (
-                        <Badge variant="secondary" className="flex items-center gap-1">
-                          <TrendingUp className="h-3 w-3" />
-                          {job.matchScore}% релевантность
+                          <Badge variant="secondary" className="text-xs flex items-center gap-1">
+                            <TrendingUp className="h-3 w-3" />{job.matchScore}%
                         </Badge>
                       )}
-                      <Button variant="outline" size="sm">
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button size="sm">
                         <ExternalLink className="h-3 w-3 mr-1" />
                         Открыть
                       </Button>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-3">{job.description}</p>
+                  {/* Короткое описание (до 2 строк) */}
+                  {job.description && (
+                    <p
+                      className="mt-3 text-sm text-muted-foreground"
+                      style={{
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2 as any,
+                        WebkitBoxOrient: "vertical" as any,
+                        overflow: "hidden",
+                      }}
+                    >
+                      {job.description}
+                    </p>
+                  )}
 
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-xs font-medium">Требуемые навыки:</Label>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {job.hardSkills.map((skill, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {skill}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label className="text-xs font-medium">Инструменты:</Label>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {job.tools.map((tool, index) => (
-                          <Badge key={index} variant="secondary" className="text-xs">
-                            {tool}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        Опубликовано: {job.postedDate.toLocaleDateString()}
-                      </span>
-                      <span>Опыт: {job.experience}</span>
-                    </div>
-                  </div>
+                  
                 </CardContent>
               </Card>
             ))}
@@ -572,69 +698,42 @@ export function JobCourseManager() {
         <TabsContent value="courses" className="mt-6">
           <div className="grid gap-4">
             {filteredCourses.map((course) => (
-              <Card key={course.id} className="hover:shadow-md transition-shadow">
-                <CardHeader>
+              <Card key={course.id} className="hover:shadow-sm transition-shadow border rounded-xl">
+                <CardContent className="p-4">
                   <div className="flex items-start justify-between">
-                    <div className="space-y-1">
-                      <CardTitle className="text-lg">{course.title}</CardTitle>
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                    <div>
+                      <div className="text-base font-semibold leading-snug">{course.title}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                         <span className="flex items-center gap-1">
-                          <Building className="h-3 w-3" />
-                          {course.provider}
+                          <Building className="h-4 w-4" />{course.provider}
                         </span>
                         <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          {course.duration}
+                          <Clock className="h-4 w-4" />{course.duration}
                         </span>
                         <span className="flex items-center gap-1">
-                          <DollarSign className="h-3 w-3" />
-                          {course.price}
+                          <DollarSign className="h-4 w-4" />{course.price}
                         </span>
+                      </div>
+                      {course.description && (
+                        <p className="mt-3 text-sm text-muted-foreground">
+                          {course.description}
+                        </p>
+                      )}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge variant="outline" className="text-xs">{course.level}</Badge>
+                        <Badge variant="outline" className="text-xs">{course.format}</Badge>
+                      {selectedTrajectory !== "all" && (
+                          <Badge variant="secondary" className="text-xs flex items-center gap-1">
+                            <TrendingUp className="h-3 w-3" />{course.matchScore}%
+                        </Badge>
+                      )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {selectedTrajectory !== "all" && (
-                        <Badge variant="secondary" className="flex items-center gap-1">
-                          <TrendingUp className="h-3 w-3" />
-                          {course.matchScore}% релевантность
-                        </Badge>
-                      )}
-                      <Button variant="outline" size="sm">
-                        <ExternalLink className="h-3 w-3 mr-1" />
-                        Перейти
+                      <Button size="sm">
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Открыть
                       </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground mb-3">{course.description}</p>
-
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-xs font-medium">Изучаемые навыки:</Label>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {course.skills.map((skill, index) => (
-                          <Badge key={index} variant="outline" className="text-xs">
-                            {skill}
-                          </Badge>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <div className="flex items-center gap-4">
-                        <span className="flex items-center gap-1">
-                          <Star className="h-3 w-3" />
-                          Рейтинг: {course.rating}
-                        </span>
-                        <Badge variant="outline" className="text-xs">
-                          {course.level}
-                        </Badge>
-                        <Badge variant="outline" className="text-xs">
-                          {course.format}
-                        </Badge>
-                      </div>
-                      <span>Язык: {course.language}</span>
                     </div>
                   </div>
                 </CardContent>

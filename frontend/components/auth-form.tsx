@@ -11,16 +11,46 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 export function AuthForm() {
   const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = async (event: React.FormEvent) => {
+  const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault()
     setIsLoading(true)
+    const form = event.target as HTMLFormElement
+    const email = (form.querySelector('#email') as HTMLInputElement).value
+    const password = (form.querySelector('#password') as HTMLInputElement).value
+    const fd = new FormData()
+    fd.append('username', email)
+    fd.append('password', password)
+    const resp = await fetch('/api/auth/login', { method: 'POST', body: fd })
+    const data = await resp.json()
+    setIsLoading(false)
+    if (!resp.ok || !data.access_token) {
+      alert(data.error || 'Ошибка входа')
+      return
+    }
+    localStorage.setItem('access_token', data.access_token)
+    window.location.href = '/dashboard'
+  }
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false)
-      // Redirect to dashboard
-      window.location.href = "/dashboard"
-    }, 1000)
+  const handleRegister = async (event: React.FormEvent) => {
+    event.preventDefault()
+    setIsLoading(true)
+    const form = event.target as HTMLFormElement
+    const name = (form.querySelector('#name') as HTMLInputElement).value
+    const email = (form.querySelector('#reg-email') as HTMLInputElement).value
+    const password = (form.querySelector('#reg-password') as HTMLInputElement).value
+    const resp = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ full_name: name, email, password }),
+    })
+    const data = await resp.json()
+    setIsLoading(false)
+    if (!resp.ok || !data.access_token) {
+      alert(data.error || 'Ошибка регистрации')
+      return
+    }
+    localStorage.setItem('access_token', data.access_token)
+    window.location.href = '/dashboard'
   }
 
   return (
@@ -31,7 +61,7 @@ export function AuthForm() {
       </TabsList>
 
       <TabsContent value="login">
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleLogin} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input id="email" type="email" placeholder="your@email.com" required />
@@ -47,7 +77,7 @@ export function AuthForm() {
       </TabsContent>
 
       <TabsContent value="register">
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleRegister} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Имя</Label>
             <Input id="name" type="text" placeholder="Ваше имя" required />

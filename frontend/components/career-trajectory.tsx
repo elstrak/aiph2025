@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { TrajectoryPDFExport } from "./trajectory-pdf-export"
 import {
   Play,
   Pause,
@@ -112,29 +113,85 @@ export function CareerTrajectory() {
   const [selectedTrajectory, setSelectedTrajectory] = useState<string>("1")
   const [selectedStep, setSelectedStep] = useState<TrajectoryStep | null>(null)
   const [trajectoryData, setTrajectoryData] = useState<TrajectoryData | null>(null)
+  const [userTrajectories, setUserTrajectories] = useState<TrajectoryData[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [userName, setUserName] = useState<string>("Пользователь")
 
-  // Load trajectory data from localStorage
+  // Load user trajectories from API
   useEffect(() => {
-    const loadTrajectoryData = () => {
+    const loadUserTrajectories = async () => {
       try {
-        const savedData = localStorage.getItem('career_trajectory_data')
-        if (savedData) {
-          const data: TrajectoryData = JSON.parse(savedData)
-          setTrajectoryData(data)
-          console.log('Trajectory data loaded:', data)
+        const token = localStorage.getItem('access_token')
+        if (!token) {
+          console.log('No access token found')
+          setIsLoading(false)
+          return
+        }
+
+        // Get user_id from token (simple decode for demo)
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        const userId = payload.sub
+
+        const response = await fetch(`/api/trajectory/user?userId=${userId}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+
+        if (response.ok) {
+          const trajectories = await response.json()
+          setUserTrajectories(trajectories)
+          console.log('User trajectories loaded:', trajectories)
+          
+          // If we have trajectories, use the first one
+          if (trajectories.length > 0) {
+            setTrajectoryData(trajectories[0])
+          }
         } else {
-          console.log('No trajectory data found in localStorage')
+          console.log('No trajectories found for user')
+        }
+
+        // Load user profile for name
+        try {
+          const profileResponse = await fetch('/api/profile/me', {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          })
+          if (profileResponse.ok) {
+            const profile = await profileResponse.json()
+            if (profile.full_name) {
+              setUserName(profile.full_name)
+            }
         }
       } catch (error) {
-        console.error('Error loading trajectory data:', error)
+          console.error('Error loading user profile:', error)
+        }
+      } catch (error) {
+        console.error('Error loading user trajectories:', error)
       } finally {
         setIsLoading(false)
       }
     }
 
-    loadTrajectoryData()
+    loadUserTrajectories()
   }, [])
+
+  // Fallback to localStorage if no API data
+  useEffect(() => {
+    if (!trajectoryData && userTrajectories.length === 0) {
+      try {
+        const savedData = localStorage.getItem('career_trajectory_data')
+        if (savedData) {
+          const data: TrajectoryData = JSON.parse(savedData)
+          setTrajectoryData(data)
+          console.log('Trajectory data loaded from localStorage:', data)
+        }
+      } catch (error) {
+        console.error('Error loading trajectory data from localStorage:', error)
+      }
+    }
+  }, [trajectoryData, userTrajectories])
 
   // Mock trajectory data
   const trajectories: Trajectory[] = [
@@ -341,6 +398,12 @@ export function CareerTrajectory() {
     }
   }
 
+  // Функция для сокращения описания вакансии
+  const truncateDescription = (description: string, maxLength: number = 150) => {
+    if (description.length <= maxLength) return description
+    return description.substring(0, maxLength).trim() + "..."
+  }
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -362,7 +425,7 @@ export function CareerTrajectory() {
     )
   }
 
-  if (!trajectoryData) {
+  if (!trajectoryData && userTrajectories.length === 0) {
     return (
       <div className="space-y-6">
         <Card>
@@ -384,6 +447,44 @@ export function CareerTrajectory() {
     )
   }
 
+  // If we have multiple trajectories, show selector
+  if (userTrajectories.length > 1) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Ваши карьерные траектории</CardTitle>
+            <CardDescription>Выберите траекторию для просмотра</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-4">
+              {userTrajectories.map((traj, index) => (
+                <Card key={index} className="cursor-pointer hover:bg-muted/50" onClick={() => setTrajectoryData(traj)}>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold">Траектория #{index + 1}</h3>
+                        <p className="text-sm text-muted-foreground">
+                          {traj.current_positions?.length || 0} текущих позиций • {traj.future_positions?.length || 0} целевых позиций
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <TrajectoryPDFExport trajectoryData={traj} userName={userName} />
+                        <Button variant="outline" size="sm">
+                          Просмотреть
+                        </Button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Trajectory Header */}
@@ -394,7 +495,9 @@ export function CareerTrajectory() {
               <CardTitle>Ваша карьерная траектория</CardTitle>
               <CardDescription>Персональный план развития на основе AI-анализа</CardDescription>
             </div>
-            <Badge variant="default">Активная</Badge>
+            <div className="flex items-center gap-3">
+              {trajectoryData && <TrajectoryPDFExport trajectoryData={trajectoryData} userName={userName} />}
+            </div>
           </div>
         </CardHeader>
 
@@ -402,15 +505,15 @@ export function CareerTrajectory() {
           {/* Summary Stats */}
           <div className="grid gap-4 md:grid-cols-3">
             <div className="text-center p-4 bg-blue-50 rounded-lg">
-              <div className="text-2xl font-bold text-blue-600">{trajectoryData.current_positions.length}</div>
+              <div className="text-2xl font-bold text-blue-600">{trajectoryData?.current_positions.length || 0}</div>
               <div className="text-sm text-blue-600">Текущие позиции</div>
             </div>
             <div className="text-center p-4 bg-green-50 rounded-lg">
-              <div className="text-2xl font-bold text-green-600">{trajectoryData.future_positions.length}</div>
+              <div className="text-2xl font-bold text-green-600">{trajectoryData?.future_positions.length || 0}</div>
               <div className="text-sm text-green-600">Целевые позиции</div>
             </div>
             <div className="text-center p-4 bg-purple-50 rounded-lg">
-              <div className="text-2xl font-bold text-purple-600">{trajectoryData.groups.length}</div>
+              <div className="text-2xl font-bold text-purple-600">{trajectoryData?.groups.length || 0}</div>
               <div className="text-sm text-purple-600">Групп обучения</div>
             </div>
           </div>
@@ -426,7 +529,7 @@ export function CareerTrajectory() {
               Подходящие вакансии
             </CardTitle>
             <CardDescription>
-              {trajectoryData.current_positions.length} текущих + {trajectoryData.future_positions.length} целевых позиций
+              {trajectoryData?.current_positions.length || 0} текущих + {trajectoryData?.future_positions.length || 0} целевых позиций
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -448,7 +551,7 @@ export function CareerTrajectory() {
               План обучения
             </CardTitle>
             <CardDescription>
-              {trajectoryData.groups.length} групп курсов для развития навыков
+              {trajectoryData?.groups.length || 0} групп курсов для развития навыков
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -485,12 +588,12 @@ export function CareerTrajectory() {
                          onClick={() => setSelectedStep({
                            id: "current",
                            title: "Текущие позиции",
-                           description: `Анализ ${trajectoryData.current_positions.length} подходящих вакансий на текущем уровне`,
+                           description: `Анализ ${trajectoryData?.current_positions.length || 0} подходящих вакансий на текущем уровне`,
                            type: "job" as const,
                            status: "completed" as const,
                            startDate: new Date(),
                            endDate: new Date(),
-                           resources: trajectoryData.current_positions.map(pos => ({
+                           resources: (trajectoryData?.current_positions?.map(pos => ({
                              id: pos.idx.toString(),
                              title: pos.title,
                              type: "job" as const,
@@ -500,7 +603,7 @@ export function CareerTrajectory() {
                              salary: pos.salary,
                              description: pos.description,
                              location: pos.location || "Удаленно"
-                           }))
+                           })) || []) as Resource[]
                          })}>
                       <Briefcase className="h-5 w-5" />
                     </div>
@@ -511,12 +614,12 @@ export function CareerTrajectory() {
                           onClick={() => setSelectedStep({
                             id: "current",
                             title: "Текущие позиции",
-                            description: `Анализ ${trajectoryData.current_positions.length} подходящих вакансий на текущем уровне`,
+                            description: `Анализ ${trajectoryData?.current_positions.length || 0} подходящих вакансий на текущем уровне`,
                             type: "job" as const,
                             status: "completed" as const,
                             startDate: new Date(),
                             endDate: new Date(),
-                            resources: trajectoryData.current_positions.map(pos => ({
+                            resources: (trajectoryData?.current_positions?.map(pos => ({
                               id: pos.idx.toString(),
                               title: pos.title,
                               type: "job" as const,
@@ -526,7 +629,7 @@ export function CareerTrajectory() {
                               salary: pos.salary,
                               description: pos.description,
                               location: pos.location || "Удаленно"
-                            }))
+                            })) || []) as Resource[]
                           })}>
                       <CardHeader className="pb-3">
                         <div className="flex items-center justify-between">
@@ -534,14 +637,14 @@ export function CareerTrajectory() {
                           <Badge variant="outline">Вакансии</Badge>
                         </div>
                         <CardDescription>
-                          Подходящие вакансии на вашем текущем уровне ({trajectoryData.current_positions.length} шт.)
+                          Подходящие вакансии на вашем текущем уровне ({trajectoryData?.current_positions.length || 0} шт.)
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="pt-0">
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Briefcase className="h-3 w-3" />
-                            {trajectoryData.current_positions.length} вакансий
+                            {trajectoryData?.current_positions.length || 0} вакансий
                           </span>
                           <span className="flex items-center gap-1">
                             <Target className="h-3 w-3" />
@@ -554,7 +657,7 @@ export function CareerTrajectory() {
                 </div>
 
                 {/* Learning Groups Steps */}
-                {trajectoryData.groups.map((group, index) => (
+                {trajectoryData?.groups?.map((group, index) => (
                   <div key={group.group_id} className="flex gap-4">
                     <div className="flex flex-col items-center">
                       <div className="w-10 h-10 rounded-full bg-purple-100 border-2 border-purple-500 text-purple-600 flex items-center justify-center cursor-pointer hover:bg-purple-200 transition-colors"
@@ -616,7 +719,7 @@ export function CareerTrajectory() {
                            })}>
                         <BookOpen className="h-5 w-5" />
                       </div>
-                      {index < trajectoryData.groups.length && <div className="w-0.5 h-16 bg-border mt-2" />}
+                      {index < (trajectoryData?.groups.length || 0) && <div className="w-0.5 h-16 bg-border mt-2" />}
                     </div>
                     <div className="flex-1 pb-8">
                       <Card className="cursor-pointer hover:shadow-md transition-shadow"
@@ -691,6 +794,7 @@ export function CareerTrajectory() {
                           <CardDescription>{group.notes}</CardDescription>
                         </CardHeader>
                         <CardContent className="pt-0">
+                          <div className="space-y-3">
                           <div className="flex items-center gap-4 text-sm text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <Clock className="h-3 w-3" />
@@ -704,6 +808,44 @@ export function CareerTrajectory() {
                               <Target className="h-3 w-3" />
                               {group.items?.length || 3} курсов
                             </span>
+                            </div>
+                            
+                            {/* Детали этапа обучения */}
+                            {group.items && group.items.length > 0 && (
+                              <div className="mt-3 p-3 bg-purple-50 rounded-lg">
+                                <div className="text-xs font-medium text-purple-700 mb-2">
+                                  🎯 Навыки для изучения:
+                                </div>
+                                <div className="space-y-1">
+                                  {group.items.slice(0, 3).map((item: any, itemIndex: number) => (
+                                    <div key={itemIndex} className="flex items-center gap-2">
+                                      <div className={`w-1.5 h-1.5 rounded-full ${
+                                        item.priority === 1 ? 'bg-red-500' : 
+                                        item.priority === 2 ? 'bg-orange-500' : 
+                                        item.priority === 3 ? 'bg-yellow-500' : 
+                                        'bg-green-500'
+                                      }`} />
+                                      <span className="text-xs text-purple-600">
+                                        {item.name}
+                                        {item.priority && ` (${item.priority})`}
+                                      </span>
+                                    </div>
+                                  ))}
+                                  {group.items.length > 3 && (
+                                    <div className="text-xs text-purple-500">
+                                      +{group.items.length - 3} других навыков
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Рекомендации AI */}
+                            {group.items && group.items.length > 0 && group.items.some((item: any) => item.recommendations?.length > 0) && (
+                              <div className="mt-2 p-2 bg-green-50 rounded text-xs text-green-700">
+                                🤖 {group.items.reduce((acc: number, item: any) => acc + (item.recommendations?.length || 0), 0)} AI-рекомендаций
+                              </div>
+                            )}
                           </div>
                         </CardContent>
                       </Card>
@@ -718,12 +860,12 @@ export function CareerTrajectory() {
                          onClick={() => setSelectedStep({
                            id: "future",
                            title: "Целевые позиции",
-                           description: `${trajectoryData.future_positions.length} вакансий следующего уровня для достижения ваших целей`,
+                           description: `${trajectoryData?.future_positions.length || 0} вакансий следующего уровня для достижения ваших целей`,
                            type: "job" as const,
                            status: "upcoming" as const,
                            startDate: new Date(),
                            endDate: new Date(),
-                           resources: trajectoryData.future_positions.map(pos => ({
+                           resources: (trajectoryData?.future_positions?.map(pos => ({
                              id: pos.idx.toString(),
                              title: pos.title,
                              type: "job" as const,
@@ -733,7 +875,7 @@ export function CareerTrajectory() {
                              salary: pos.salary,
                              description: pos.description,
                              location: pos.location || "Удаленно"
-                           }))
+                           })) || []) as Resource[]
                          })}>
                       <Target className="h-5 w-5" />
                     </div>
@@ -743,12 +885,12 @@ export function CareerTrajectory() {
                           onClick={() => setSelectedStep({
                             id: "future",
                             title: "Целевые позиции",
-                            description: `${trajectoryData.future_positions.length} вакансий следующего уровня для достижения ваших целей`,
+                            description: `${trajectoryData?.future_positions.length || 0} вакансий следующего уровня для достижения ваших целей`,
                             type: "job" as const,
                             status: "upcoming" as const,
                             startDate: new Date(),
                             endDate: new Date(),
-                            resources: trajectoryData.future_positions.map(pos => ({
+                            resources: (trajectoryData?.future_positions?.map(pos => ({
                               id: pos.idx.toString(),
                               title: pos.title,
                               type: "job" as const,
@@ -758,7 +900,7 @@ export function CareerTrajectory() {
                               salary: pos.salary,
                               description: pos.description,
                               location: pos.location || "Удаленно"
-                            }))
+                            })) || []) as Resource[]
                           })}>
                       <CardHeader className="pb-3">
                         <div className="flex items-center justify-between">
@@ -766,14 +908,14 @@ export function CareerTrajectory() {
                           <Badge variant="outline">Цель</Badge>
                         </div>
                         <CardDescription>
-                          Вакансии следующего уровня ({trajectoryData.future_positions.length} шт.)
+                          Вакансии следующего уровня ({trajectoryData?.future_positions.length || 0} шт.)
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="pt-0">
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Briefcase className="h-3 w-3" />
-                            {trajectoryData.future_positions.length} вакансий
+                            {trajectoryData?.future_positions.length || 0} вакансий
                           </span>
                           <span className="flex items-center gap-1">
                             <TrendingUp className="h-3 w-3" />
@@ -845,17 +987,22 @@ export function CareerTrajectory() {
                                 {skill.rationale && (
                                   <div className="text-xs text-blue-500 mt-1">{skill.rationale}</div>
                                 )}
+                                {skill.prerequisites && skill.prerequisites.length > 0 && (
+                                  <div className="text-xs text-blue-400 mt-1">
+                                    📋 Предварительные требования: {skill.prerequisites.join(', ')}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           ))
                         ) : (
                           // Fallback example skills when no real data
                           [
-                            { name: "Продвинутый Python", kind: "skill", priority: 1, rationale: "Основной язык для анализа данных" },
-                            { name: "Machine Learning", kind: "skill", priority: 1, rationale: "Ключевой навык для Data Science" },
-                            { name: "SQL оптимизация", kind: "skill", priority: 2, rationale: "Для работы с большими данными" },
-                            { name: "Опыт работы с A/B тестами", kind: "experience", priority: 2, rationale: "Необходим для продуктовой аналитики" },
-                            { name: "Senior уровень", kind: "level", priority: 3, rationale: "Целевой уровень развития" }
+                            { name: "Продвинутый Python", kind: "skill", priority: 1, rationale: "Основной язык для анализа данных", prerequisites: ["Базовый Python", "ООП"] },
+                            { name: "Machine Learning", kind: "skill", priority: 1, rationale: "Ключевой навык для Data Science", prerequisites: ["Python", "Статистика"] },
+                            { name: "SQL оптимизация", kind: "skill", priority: 2, rationale: "Для работы с большими данными", prerequisites: ["Базовый SQL"] },
+                            { name: "Опыт работы с A/B тестами", kind: "experience", priority: 2, rationale: "Необходим для продуктовой аналитики", prerequisites: ["Статистика", "Аналитика"] },
+                            { name: "Senior уровень", kind: "level", priority: 3, rationale: "Целевой уровень развития", prerequisites: ["3+ года опыта"] }
                           ].map((skill, index) => (
                             <div key={index} className="flex items-start gap-2">
                               <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${
@@ -874,6 +1021,11 @@ export function CareerTrajectory() {
                                 </div>
                                 {skill.rationale && (
                                   <div className="text-xs text-blue-500 mt-1">{skill.rationale}</div>
+                                )}
+                                {skill.prerequisites && skill.prerequisites.length > 0 && (
+                                  <div className="text-xs text-blue-400 mt-1">
+                                    📋 Предварительные требования: {skill.prerequisites.join(', ')}
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -908,8 +1060,16 @@ export function CareerTrajectory() {
                       {selectedStep.type === "job" ? "Подходящие вакансии:" : "🤖 AI-рекомендации для изучения:"}
                     </h5>
                     {selectedStep.type === "skill" && selectedStep.resources.length > 0 && (
-                      <div className="mb-3 p-2 bg-green-50 rounded text-xs text-green-700">
-                        💡 Персональные рекомендации от YandexGPT на основе анализа ваших целей
+                      <div className="mb-3 p-3 bg-green-50 rounded-lg">
+                        <div className="flex items-center gap-2 text-xs font-medium text-green-700 mb-1">
+                          🤖 AI-рекомендации
+                        </div>
+                        <div className="text-xs text-green-600">
+                          Персональные рекомендации от YandexGPT на основе анализа ваших целей и текущих навыков
+                        </div>
+                        <div className="mt-2 text-xs text-green-500">
+                          📊 Найдено {selectedStep.resources.length} рекомендаций
+                        </div>
                       </div>
                     )}
                     <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -932,7 +1092,7 @@ export function CareerTrajectory() {
                                     )}
                                     {(resource as any).description && (
                                       <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                        {(resource as any).description}
+                                        {truncateDescription((resource as any).description, 120)}
                                       </p>
                                     )}
                                   </>
@@ -949,7 +1109,7 @@ export function CareerTrajectory() {
                                     )}
                                     {(resource as any).description && (
                                       <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                                        {(resource as any).description}
+                                        {truncateDescription((resource as any).description, 120)}
                                       </p>
                                     )}
                                   </>

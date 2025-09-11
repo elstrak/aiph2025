@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
 from app.db.mongo import get_db
 from app.models import ProfileResponse
@@ -41,4 +41,19 @@ async def get_profile(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to build profile: {e}")
 
+
+@router.post("/upload")
+async def upload_resume(
+    file: UploadFile = File(...),
+    service: ProfileService = Depends(get_profile_service),
+):
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Only PDF resumes are supported")
+    try:
+        content = await file.read()
+        # Just extract text for now; actual mapping to profile can be added later
+        text = service.extract_text_from_pdf(content)
+        return {"text": text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse PDF: {e}")
 

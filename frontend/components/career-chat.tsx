@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { ScrollArea } from "@/components/ui/scroll-area"
+// Removed custom ScrollArea in favor of native overflow for always-visible scrollbar
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Upload, Send, Bot, User, FileText, Plus, Edit } from "lucide-react"
 
@@ -28,6 +28,7 @@ export function CareerChat() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const bottomRef = useRef<HTMLDivElement>(null)
 
   // Load saved session on component mount
   useEffect(() => {
@@ -38,11 +39,20 @@ export function CareerChat() {
     }
   }, [])
 
+  // Auto scroll to the latest message
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+  }, [messages, isLoading])
+
   // Create new session
   const createSession = async () => {
     try {
+      const token = localStorage.getItem('access_token')
       const response = await fetch('/api/sessions', {
         method: 'POST',
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        }
       })
       const data = await response.json()
       if (data.session_id) {
@@ -67,7 +77,12 @@ export function CareerChat() {
   // Load existing session from MongoDB
   const loadSession = async (sessionId: string) => {
     try {
-      const response = await fetch(`/api/sessions?sessionId=${sessionId}`)
+      const token = localStorage.getItem('access_token')
+      const response = await fetch(`/api/sessions?sessionId=${sessionId}`, {
+        headers: {
+          ...(token && { 'Authorization': `Bearer ${token}` })
+        }
+      })
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -116,10 +131,12 @@ export function CareerChat() {
     if (!sessionId) return
 
     try {
+      const token = localStorage.getItem('access_token')
       const response = await fetch('/api/chat/session', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
         },
         body: JSON.stringify({ sessionId, text }),
       })
@@ -181,6 +198,10 @@ export function CareerChat() {
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (file) {
+      if (file.type !== 'application/pdf') {
+        console.error('Only PDF is allowed')
+        return
+      }
       setUploadedFile(file)
     }
   }
@@ -207,10 +228,12 @@ export function CareerChat() {
     setIsLoading(true)
     
     try {
+      const token = localStorage.getItem('access_token')
       const response = await fetch('/api/trajectory/build', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token && { 'Authorization': `Bearer ${token}` })
         },
         body: JSON.stringify({
           session_id: sessionId,
@@ -267,9 +290,9 @@ export function CareerChat() {
             <CardDescription>Обсудите свои карьерные цели и получите персональные рекомендации</CardDescription>
           </CardHeader>
 
-          <CardContent className="flex-1 flex flex-col gap-4">
+          <CardContent className="flex-1 flex flex-col gap-4 min-h-0">
             {/* Messages */}
-            <ScrollArea className="flex-1 pr-4">
+            <div className="flex-1 overflow-y-auto pr-4 scroll-smooth">
               <div className="space-y-4">
                 {messages.map((message) => (
                   <div
@@ -305,8 +328,9 @@ export function CareerChat() {
                     </div>
                   </div>
                 )}
+                <div ref={bottomRef} />
               </div>
-            </ScrollArea>
+            </div>
 
             {/* File Upload Area */}
             {uploadedFile && (
@@ -322,18 +346,20 @@ export function CareerChat() {
             {/* Input Area */}
             <div className="flex gap-2">
               <div className="flex-1">
-                <Textarea
-                  placeholder="Напишите ваш вопрос или расскажите о карьерных целях..."
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault()
-                      handleSendMessage()
-                    }
-                  }}
-                  className="min-h-[60px]"
-                />
+                <div className="rounded-lg border-2 border-primary p-2">
+                  <Textarea
+                    placeholder="Напишите ваш вопрос или расскажите о карьерных целях..."
+                    value={inputMessage}
+                    onChange={(e) => setInputMessage(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault()
+                        handleSendMessage()
+                      }
+                    }}
+                    className="min-h-[60px] border-0 focus-visible:ring-0"
+                  />
+                </div>
               </div>
               <div className="flex flex-col gap-2">
                 <Button variant="outline" size="icon" onClick={() => fileInputRef.current?.click()}>
@@ -348,7 +374,7 @@ export function CareerChat() {
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.doc,.docx,.txt"
+              accept=".pdf"
               onChange={handleFileUpload}
               className="hidden"
             />
@@ -405,8 +431,12 @@ export function CareerChat() {
                               size="sm"
                               className="w-full justify-start"
                               onClick={() => {
-                                localStorage.clear()
-                                window.location.reload()
+                                // Сбрасываем только данные сессии, не трогая токен авторизации
+                                localStorage.removeItem('career_session_id')
+                                localStorage.removeItem('career_trajectory_data')
+                                setMessages([])
+                                setSessionId("")
+                                setInterviewCompleted(false)
                               }}
                             >
                               🗑️ Сбросить сессию (для отладки)

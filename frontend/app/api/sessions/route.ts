@@ -1,12 +1,16 @@
 // Create new session
-export async function POST() {
+export async function POST(request: Request) {
   try {
     const ML_API_URL = process.env.ML_API_URL || 'http://localhost:8044'
+    
+    // Get authorization header from the request
+    const authorization = request.headers.get('authorization')
     
     const response = await fetch(`${ML_API_URL}/sessions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(authorization && { 'Authorization': authorization })
       },
       body: JSON.stringify({})
     })

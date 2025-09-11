@@ -2,6 +2,7 @@ export async function POST(request: Request) {
   try {
     const ML_API_URL = process.env.ML_API_URL || 'http://localhost:8044'
     const { sessionId, text } = await request.json()
+    const authorization = request.headers.get('authorization')
     
     console.log('Chat API called:', {
       sessionId: sessionId,
@@ -23,6 +24,7 @@ export async function POST(request: Request) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        ...(authorization && { 'Authorization': authorization })
       },
       body: JSON.stringify({ text })
     })

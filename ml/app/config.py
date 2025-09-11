@@ -21,6 +21,10 @@ class Settings(BaseSettings):
 
     message_window_size: int = Field(default=12, alias="MESSAGE_WINDOW_SIZE")
 
+    
+    backend_jwt_secret: str = Field(default="", alias="BACKEND_JWT_SECRET")
+    backend_jwt_algorithm: str = Field(default="HS256", alias="BACKEND_JWT_ALGORITHM")
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

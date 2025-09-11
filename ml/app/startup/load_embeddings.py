@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -7,7 +8,17 @@ import numpy as np
 import faiss  # type: ignore
 
 
-BASE_EMBED_DIR = Path('/app/embeddings')
+# Resolve embeddings directory:
+# 1) EMBEDDINGS_DIR env
+# 2) Docker default: /app/embeddings
+# 3) Local fallback: ./data/embeddings (project ml directory)
+_env_dir = os.environ.get("EMBEDDINGS_DIR")
+if _env_dir:
+    BASE_EMBED_DIR = Path(_env_dir)
+else:
+    docker_dir = Path('/app/embeddings')
+    local_dir = Path(__file__).resolve().parents[2] / 'data' / 'embeddings'
+    BASE_EMBED_DIR = docker_dir if docker_dir.exists() else local_dir
 VAC_EMBED_DIR = BASE_EMBED_DIR / 'vacancies'
 COURSE_EMBED_DIR = BASE_EMBED_DIR / 'courses'
 

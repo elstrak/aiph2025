@@ -123,8 +123,12 @@ class TrajectoryService:
             future_positions=future.result,
         )
 
+        # Get user_id from session
+        session = await sessions_repo.find_by_id(req.session_id)
+        user_id = session.get("user_id") if session else None
+
         t0 = time.perf_counter()
-        await traj_repo.upsert(req.session_id, response.model_dump())
+        await traj_repo.upsert(req.session_id, response.model_dump(), user_id)
         t1 = time.perf_counter()
         self.logger.info("Trajectory: persist took %.3fs", (t1 - t0))
         return response
